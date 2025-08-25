@@ -21,6 +21,7 @@ export async function fetchNotesFromSupabase(): Promise<StickyNote[]> {
       .from('sticky_notes')
       .select('*')
       .order('created_at', { ascending: false })
+      .returns<StickyNoteRow[]>()
 
     if (error || !data) {
       console.error('Supabase 노트 조회 실패:', error)
@@ -28,7 +29,7 @@ export async function fetchNotesFromSupabase(): Promise<StickyNote[]> {
     }
 
     // 데이터베이스 형식을 앱 형식으로 변환
-    return data.map((dbNote: StickyNoteRow) => ({
+    return data.map(dbNote => ({
       id: dbNote.id,
       content: dbNote.content,
       category: dbNote.category,
@@ -62,6 +63,7 @@ export async function saveNoteToSupabase(note: StickyNote): Promise<boolean> {
     const { error } = await supabase
       .from('sticky_notes')
       .insert([insertData])
+      .returns<StickyNoteRow[]>()
 
     if (error) {
       console.error('Supabase 노트 저장 실패:', error)
@@ -94,6 +96,7 @@ export async function updateNoteInSupabase(note: StickyNote): Promise<boolean> {
       .from('sticky_notes')
       .update(updateData)
       .eq('id', note.id)
+      .returns<StickyNoteRow[]>()
 
     if (error) {
       console.error('Supabase 노트 업데이트 실패:', error)
@@ -117,6 +120,7 @@ export async function deleteNoteFromSupabase(noteId: string): Promise<boolean> {
       .from('sticky_notes')
       .delete()
       .eq('id', noteId)
+      .returns<StickyNoteRow[]>()
 
     if (error) {
       console.error('Supabase 노트 삭제 실패:', error)
