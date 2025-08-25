@@ -6,7 +6,7 @@ import { Edit3 } from 'lucide-react';
 
 interface AffinityDiagramProps {
   notes: StickyNote[];
-  onNoteSelect: (note: StickyNote) => void;
+  onNoteSelect: (note: StickyNote | null) => void;
   onSwitchToMemo: () => void;
 }
 
