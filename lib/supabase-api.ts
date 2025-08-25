@@ -4,8 +4,6 @@ import { Database } from './database.types'
 
 // Supabase 테이블 타입 정의
 type StickyNoteRow = Database['public']['Tables']['sticky_notes']['Row']
-type StickyNoteInsert = Database['public']['Tables']['sticky_notes']['Insert']
-type StickyNoteUpdate = Database['public']['Tables']['sticky_notes']['Update']
 
 // LocalStorage 키
 const LOCAL_STORAGE_KEY = 'sticky-notes'
@@ -46,20 +44,17 @@ export async function fetchNotesFromSupabase(): Promise<StickyNote[]> {
  */
 export async function saveNoteToSupabase(note: StickyNote): Promise<boolean> {
   try {
-    // Supabase Insert 타입에 맞는 데이터 구성
-    const insertData: StickyNoteInsert = {
-      id: note.id,
-      content: note.content,
-      category: note.category,
-      color: note.color,
-      is_completed: note.isCompleted || false,
-      created_at: note.createdAt.toISOString(),
-      updated_at: note.updatedAt.toISOString(),
-    }
-
     const { error } = await supabase
       .from('sticky_notes')
-      .insert(insertData)
+      .insert([{
+        id: note.id,
+        content: note.content,
+        category: note.category,
+        color: note.color,
+        is_completed: note.isCompleted || false,
+        created_at: note.createdAt.toISOString(),
+        updated_at: note.updatedAt.toISOString(),
+      }])
 
     if (error) {
       console.error('Supabase 노트 저장 실패:', error)
@@ -79,18 +74,15 @@ export async function saveNoteToSupabase(note: StickyNote): Promise<boolean> {
  */
 export async function updateNoteInSupabase(note: StickyNote): Promise<boolean> {
   try {
-    // Supabase Update 타입에 맞는 데이터 구성
-    const updateData: StickyNoteUpdate = {
-      content: note.content,
-      category: note.category,
-      color: note.color,
-      is_completed: note.isCompleted || false,
-      updated_at: note.updatedAt.toISOString(),
-    }
-
     const { error } = await supabase
       .from('sticky_notes')
-      .update(updateData)
+      .update({
+        content: note.content,
+        category: note.category,
+        color: note.color,
+        is_completed: note.isCompleted || false,
+        updated_at: note.updatedAt.toISOString(),
+      })
       .eq('id', note.id)
 
     if (error) {
