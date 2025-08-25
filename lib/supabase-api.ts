@@ -3,9 +3,11 @@ import { StickyNote } from './types'
 import type { Database } from './database.types.js'
 
 // Supabase 테이블 타입 정의
-type StickyNoteRow = Database['public']['Tables']['sticky_notes']['Row']
-type StickyNoteInsert = Database['public']['Tables']['sticky_notes']['Insert']
-type StickyNoteUpdate = Database['public']['Tables']['sticky_notes']['Update']
+type Tables = Database['public']['Tables']
+type StickyNoteTable = Tables['sticky_notes']
+type StickyNoteRow = StickyNoteTable['Row']
+type StickyNoteInsert = StickyNoteTable['Insert']
+type StickyNoteUpdate = StickyNoteTable['Update']
 
 // LocalStorage 키
 const LOCAL_STORAGE_KEY = 'sticky-notes'
@@ -59,7 +61,7 @@ export async function saveNoteToSupabase(note: StickyNote): Promise<boolean> {
 
     const { error } = await supabase
       .from('sticky_notes')
-      .insert(insertData)
+      .insert([insertData])
 
     if (error) {
       console.error('Supabase 노트 저장 실패:', error)
