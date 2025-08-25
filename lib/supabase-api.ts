@@ -19,15 +19,15 @@ export async function fetchNotesFromSupabase(): Promise<StickyNote[]> {
       return []
     }
 
-    // 데이터베이스 형식을 앱 형식으로 변환
-    return data.map(dbNote => ({
+    // 데이터베이스 형식을 앱 형식으로 변환 (명시적 타입 캐스팅)
+    return (data as any[]).map((dbNote: any) => ({
       id: dbNote.id,
       content: dbNote.content,
-      category: dbNote.category,
-      color: dbNote.color,
+      category: dbNote.category as 'To-Do' | '메모' | '아이디어',
+      color: dbNote.color as 'yellow' | 'pink' | 'blue' | 'green',
       createdAt: new Date(dbNote.created_at),
       updatedAt: new Date(dbNote.updated_at),
-      isCompleted: dbNote.is_completed,
+      isCompleted: dbNote.is_completed || false,
     }))
   } catch (error) {
     console.error('Supabase 연결 실패:', error)
