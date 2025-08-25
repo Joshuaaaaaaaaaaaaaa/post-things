@@ -1,9 +1,5 @@
 import { supabase } from './supabase'
 import { StickyNote } from './types'
-import { Database } from './database.types'
-
-// Supabase 테이블 타입 정의
-type StickyNoteRow = Database['public']['Tables']['sticky_notes']['Row']
 
 // LocalStorage 키
 const LOCAL_STORAGE_KEY = 'sticky-notes'
@@ -13,7 +9,7 @@ const LOCAL_STORAGE_KEY = 'sticky-notes'
  */
 export async function fetchNotesFromSupabase(): Promise<StickyNote[]> {
   try {
-    const { data, error } = await supabase
+    const { data, error } = await (supabase as any)
       .from('sticky_notes')
       .select('*')
       .order('created_at', { ascending: false })
@@ -23,8 +19,8 @@ export async function fetchNotesFromSupabase(): Promise<StickyNote[]> {
       return []
     }
 
-    // 데이터베이스 형식을 앱 형식으로 변환 (Supabase 타입 사용)
-    return (data as StickyNoteRow[]).map((dbNote: StickyNoteRow) => ({
+    // 데이터베이스 형식을 앱 형식으로 변환
+    return (data as any[]).map((dbNote: any) => ({
       id: dbNote.id,
       content: dbNote.content,
       category: dbNote.category,
@@ -44,7 +40,7 @@ export async function fetchNotesFromSupabase(): Promise<StickyNote[]> {
  */
 export async function saveNoteToSupabase(note: StickyNote): Promise<boolean> {
   try {
-    const { error } = await supabase
+    const { error } = await (supabase as any)
       .from('sticky_notes')
       .insert([{
         id: note.id,
@@ -74,7 +70,7 @@ export async function saveNoteToSupabase(note: StickyNote): Promise<boolean> {
  */
 export async function updateNoteInSupabase(note: StickyNote): Promise<boolean> {
   try {
-    const { error } = await supabase
+    const { error } = await (supabase as any)
       .from('sticky_notes')
       .update({
         content: note.content,
@@ -103,7 +99,7 @@ export async function updateNoteInSupabase(note: StickyNote): Promise<boolean> {
  */
 export async function deleteNoteFromSupabase(noteId: string): Promise<boolean> {
   try {
-    const { error } = await supabase
+    const { error } = await (supabase as any)
       .from('sticky_notes')
       .delete()
       .eq('id', noteId)
@@ -169,7 +165,7 @@ export async function migrateLocalStorageToSupabase(): Promise<boolean> {
  */
 export async function checkSupabaseConnection(): Promise<boolean> {
   try {
-    const { error } = await supabase
+    const { error } = await (supabase as any)
       .from('sticky_notes')
       .select('count', { count: 'exact', head: true })
 
