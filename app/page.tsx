@@ -104,6 +104,7 @@ export default function Home() {
         <StickyNoteInput
           onSave={addNote}
           onDelete={deleteNote}
+          onComplete={toggleNoteCompletion}
           onSwitchToAffinity={() => setViewMode('diagram')}
           currentNote={currentNote}
           setCurrentNote={setCurrentNote}
