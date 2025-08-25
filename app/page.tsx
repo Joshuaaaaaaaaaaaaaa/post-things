@@ -118,8 +118,6 @@ export default function Home() {
             setViewMode('memo');
           }}
           onSwitchToMemo={() => setViewMode('memo')}
-          onNoteComplete={toggleNoteCompletion}
-          onNoteDelete={deleteNote}
         />
       )}
     </div>
