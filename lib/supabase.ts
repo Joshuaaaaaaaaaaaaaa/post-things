@@ -1,18 +1,19 @@
 import { createClient } from '@supabase/supabase-js'
-import { Database } from './database.types'
+import type { Database } from './database.types.js'
 
 // Supabase 프로젝트 설정
-// 실제 사용 시 environment variables로 변경 필요
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.warn('Supabase environment variables are not set. Cloud synchronization will be disabled.')
+}
 
 // Supabase 클라이언트 생성
-export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-  },
-})
+export const supabase = createClient<Database>(
+  supabaseUrl || 'http://localhost', // Fallback for local dev without env vars
+  supabaseAnonKey || 'dummy_key' // Fallback for local dev without env vars
+)
 
 // 데이터베이스 타입 정의 (자동 생성 예정)
 export type StickyNoteDB = Database['public']['Tables']['sticky_notes']['Row']
