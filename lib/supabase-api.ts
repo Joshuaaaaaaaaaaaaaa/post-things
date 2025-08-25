@@ -1,5 +1,9 @@
 import { supabase } from './supabase'
 import { StickyNote } from './types'
+import { Database } from './database.types'
+
+// Supabase 테이블 타입 정의
+type StickyNoteRow = Database['public']['Tables']['sticky_notes']['Row']
 
 // LocalStorage 키
 const LOCAL_STORAGE_KEY = 'sticky-notes'
@@ -19,12 +23,12 @@ export async function fetchNotesFromSupabase(): Promise<StickyNote[]> {
       return []
     }
 
-    // 데이터베이스 형식을 앱 형식으로 변환 (명시적 타입 캐스팅)
-    return (data as any[]).map((dbNote: any) => ({
+    // 데이터베이스 형식을 앱 형식으로 변환 (Supabase 타입 사용)
+    return (data as StickyNoteRow[]).map((dbNote: StickyNoteRow) => ({
       id: dbNote.id,
       content: dbNote.content,
-      category: dbNote.category as 'To-Do' | '메모' | '아이디어',
-      color: dbNote.color as 'yellow' | 'pink' | 'blue' | 'green',
+      category: dbNote.category,
+      color: dbNote.color,
       createdAt: new Date(dbNote.created_at),
       updatedAt: new Date(dbNote.updated_at),
       isCompleted: dbNote.is_completed || false,
