@@ -163,7 +163,7 @@ export async function categorizeContent(content: string): Promise<Category> {
     const aiResult = await categorizeWithAI(content);
     console.log('최종 결과 (AI):', aiResult);
     return aiResult;
-  } catch (error) {
+  } catch {
     console.warn('AI 분류 실패, 키워드 결과 사용:', keywordResult);
     return keywordResult;
   }

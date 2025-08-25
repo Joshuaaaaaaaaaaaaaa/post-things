@@ -8,16 +8,12 @@ interface AffinityDiagramProps {
   notes: StickyNote[];
   onNoteSelect: (note: StickyNote) => void;
   onSwitchToMemo: () => void;
-  onNoteComplete: (id: string) => void;
-  onNoteDelete: (id: string) => void;
 }
 
 export default function AffinityDiagram({
   notes,
   onNoteSelect,
-  onSwitchToMemo,
-  onNoteComplete,
-  onNoteDelete
+  onSwitchToMemo
 }: AffinityDiagramProps) {
   
   const handleNoteClick = (note: StickyNote) => {
@@ -42,7 +38,7 @@ export default function AffinityDiagram({
 
   // 카테고리를 우선순위에 따라 정렬
   const sortedCategories = Object.keys(groupedNotes).sort((a, b) => {
-    return getCategoryPriority(a as any) - getCategoryPriority(b as any);
+    return getCategoryPriority(a as 'To-Do' | '메모' | '아이디어') - getCategoryPriority(b as 'To-Do' | '메모' | '아이디어');
   });
 
   // 카테고리별 색상 테마

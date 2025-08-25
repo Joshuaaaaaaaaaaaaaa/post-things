@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { StickyNote } from '@/lib/types';
-import { getCategoryColor, categorizeContent } from '@/lib/ai-categorizer';
+import { getCategoryColor } from '@/lib/ai-categorizer';
 import { useGestures } from '@/hooks/useGestures';
 import { Check, X, Brain } from 'lucide-react';
 
@@ -286,7 +286,7 @@ export default function StickyNoteInput({
   // 실시간 드래그 핸들러
   const [dragDirection, setDragDirection] = useState<'horizontal' | 'vertical' | null>(null);
   
-  const handleDragStart = (x: number, y: number) => {
+  const handleDragStart = () => {
     setIsDragging(true);
     setIsInteracting(true);
     setDragDirection(null); // 방향 초기화
