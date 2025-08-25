@@ -14,7 +14,7 @@ export async function fetchNotesFromSupabase(): Promise<StickyNote[]> {
       .select('*')
       .order('created_at', { ascending: false })
 
-    if (error) {
+    if (error || !data) {
       console.error('Supabase 노트 조회 실패:', error)
       return []
     }
@@ -165,7 +165,7 @@ export async function migrateLocalStorageToSupabase(): Promise<boolean> {
  */
 export async function checkSupabaseConnection(): Promise<boolean> {
   try {
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('sticky_notes')
       .select('count', { count: 'exact', head: true })
 
