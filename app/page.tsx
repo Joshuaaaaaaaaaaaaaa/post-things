@@ -17,7 +17,7 @@ export default function Home() {
     const savedNotes = localStorage.getItem('sticky-notes');
     if (savedNotes) {
       try {
-        const parsedNotes = JSON.parse(savedNotes).map((note: any) => ({
+        const parsedNotes = JSON.parse(savedNotes).map((note: StickyNote) => ({
           ...note,
           createdAt: new Date(note.createdAt),
           updatedAt: new Date(note.updatedAt),
