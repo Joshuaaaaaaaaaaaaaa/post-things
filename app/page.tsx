@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { StickyNote, ViewMode } from '@/lib/types';
-import { categorizeContent, getCategoryColor } from '@/lib/ai-categorizer';
+import { categorizeContent } from '@/lib/ai-categorizer';
 import { 
   fetchNotesFromSupabase, 
   saveNoteToSupabase, 
@@ -11,8 +11,10 @@ import {
   migrateLocalStorageToSupabase,
   checkSupabaseConnection 
 } from '@/lib/supabase-api';
+import { supabase } from '@/lib/supabase';
 import StickyNoteInput from '@/components/StickyNoteInput';
 import AffinityDiagram from '@/components/AffinityDiagram';
+import { useToast } from "@/hooks/use-toast";
 
 export default function Home() {
   const [viewMode, setViewMode] = useState<ViewMode>('memo');
@@ -21,128 +23,165 @@ export default function Home() {
   const [isClassifying, setIsClassifying] = useState(false);
   const [isSupabaseConnected, setIsSupabaseConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const { toast } = useToast();
 
-  // Supabase 연결 및 데이터 로딩
+  // 앱 초기화
   useEffect(() => {
-    async function initializeApp() {
+    const initializeApp = async () => {
       setIsLoading(true);
-      
       try {
-        // 1. Supabase 연결 확인
+        // Supabase 연결 확인
         const isConnected = await checkSupabaseConnection();
         setIsSupabaseConnected(isConnected);
         
         if (isConnected) {
-          console.log('✅ Supabase 연결 성공');
-          
-          // 2. LocalStorage → Supabase 마이그레이션 (최초 1회)
+          // LocalStorage 데이터 마이그레이션 (최초 1회)
           await migrateLocalStorageToSupabase();
           
-          // 3. Supabase에서 노트 로드
+          // Supabase에서 노트 가져오기
           const supabaseNotes = await fetchNotesFromSupabase();
           setNotes(supabaseNotes);
-          console.log(`📋 ${supabaseNotes.length}개 노트 로드됨`);
         } else {
-          console.warn('⚠️ Supabase 연결 실패, LocalStorage 사용');
-          
-          // Supabase 실패 시 LocalStorage 사용
+          // LocalStorage에서 노트 가져오기
           const savedNotes = localStorage.getItem('sticky-notes');
           if (savedNotes) {
-            try {
-              const parsedNotes = JSON.parse(savedNotes).map((note: StickyNote) => ({
-                ...note,
-                createdAt: new Date(note.createdAt),
-                updatedAt: new Date(note.updatedAt),
-              }));
-              setNotes(parsedNotes);
-              console.log(`📋 LocalStorage에서 ${parsedNotes.length}개 노트 로드됨`);
-            } catch (error) {
-              console.error('LocalStorage 노트 불러오기 실패:', error);
-            }
+            setNotes(JSON.parse(savedNotes));
           }
         }
       } catch (error) {
         console.error('앱 초기화 실패:', error);
+        toast({
+          title: "데이터 로드 실패",
+          description: "새로고침을 시도해주세요.",
+          variant: "destructive",
+        });
       } finally {
         setIsLoading(false);
       }
-    }
-    
-    initializeApp();
-  }, []);
+    };
 
-  // 노트 저장 (Supabase + LocalStorage 백업)
+    initializeApp();
+  }, [toast]);
+
+  // Supabase Realtime 구독
+  useEffect(() => {
+    if (!isSupabaseConnected) {
+      console.log('Realtime: Supabase 미연결, 구독 비활성화');
+      return;
+    }
+
+    console.log('Realtime: Supabase 연결됨, 구독 시작 시도...');
+    
+    const channel = supabase
+      .channel('sticky_notes_changes', {
+        config: {
+          broadcast: { self: true }
+        }
+      })
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'sticky_notes'
+        },
+        async (payload) => {
+          console.log('Realtime: 데이터베이스 변경 감지:', payload);
+          const supabaseNotes = await fetchNotesFromSupabase();
+          setNotes(supabaseNotes);
+          console.log('Realtime: 📱💻 실시간 동기화 완료');
+        }
+      )
+      .subscribe((status) => {
+        console.log('Realtime: 구독 상태:', status);
+        if (status === 'SUBSCRIBED') {
+          console.log('Realtime: ✅ 채널 구독 성공');
+        } else if (status === 'CHANNEL_ERROR') {
+          console.error('Realtime: ❌ 채널 구독 에러');
+        }
+      });
+
+    return () => {
+      if (channel) {
+        console.log('Realtime: 채널 구독 해제');
+        supabase.removeChannel(channel);
+      }
+    };
+  }, [isSupabaseConnected]);
+
+  // 노트 저장
   const saveNotes = async (updatedNotes: StickyNote[]) => {
     try {
-      // 즉시 UI 업데이트
-      setNotes(updatedNotes);
-      
       if (isSupabaseConnected) {
-        // Supabase에 저장 (백그라운드)
-        // 개별 노트 처리는 addNote, updateNote에서 담당
-        console.log('📋 노트 목록 업데이트됨');
+        // Supabase에 저장
+        await saveNoteToSupabase(updatedNotes[0]); // 새로운 노트는 항상 배열의 첫 번째
       } else {
-        // Supabase 미연결 시 LocalStorage 사용
+        // LocalStorage에 저장
         localStorage.setItem('sticky-notes', JSON.stringify(updatedNotes));
-        console.log('💾 LocalStorage에 저장됨');
       }
+      setNotes(updatedNotes);
     } catch (error) {
       console.error('노트 저장 실패:', error);
-      // TODO: 에러 알림 표시
+      toast({
+        title: "저장 실패",
+        description: "다시 시도해주세요.",
+        variant: "destructive",
+      });
     }
   };
 
-  // 새 노트 추가 (AI 분류 포함)
+  // 노트 추가/수정
   const addNote = async (content: string) => {
     setIsClassifying(true);
-    
     try {
-      console.log('AI 분류 시작:', content);
-      
-      // AI 분류 실행
       const category = await categorizeContent(content);
-      const color = getCategoryColor(category);
+      const now = new Date();
       
-      console.log('분류 완료:', { category, color });
-      
-      const newNote: StickyNote = {
-        id: Date.now().toString(),
-        content,
-        category, // AI로 분류된 카테고리
-        color,    // 카테고리에 맞는 색상
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-
-      const updatedNotes = [...notes, newNote];
-      
-      // Supabase에 개별 저장
-      if (isSupabaseConnected) {
-        const success = await saveNoteToSupabase(newNote);
-        if (success) {
-          console.log('✅ Supabase에 노트 저장 성공');
+      if (currentNote) {
+        // 기존 노트 수정
+        const updatedNote = {
+          ...currentNote,
+          content,
+          category,
+          updatedAt: now
+        };
+        
+        if (isSupabaseConnected) {
+          await updateNoteInSupabase(updatedNote);
+          const updatedNotes = await fetchNotesFromSupabase();
+          setNotes(updatedNotes);
         } else {
-          console.warn('⚠️ Supabase 저장 실패, LocalStorage 백업');
+          const updatedNotes = notes.map(note => 
+            note.id === currentNote.id ? updatedNote : note
+          );
           localStorage.setItem('sticky-notes', JSON.stringify(updatedNotes));
+          setNotes(updatedNotes);
         }
+      } else {
+        // 새 노트 추가
+        const newNote: StickyNote = {
+          id: crypto.randomUUID(),
+          content,
+          category,
+          color: ['yellow', 'pink', 'blue', 'green'][Math.floor(Math.random() * 4)] as 'yellow' | 'pink' | 'blue' | 'green',
+          createdAt: now,
+          updatedAt: now,
+          isCompleted: false
+        };
+        
+        const updatedNotes = [newNote, ...notes];
+        await saveNotes(updatedNotes);
       }
       
-      await saveNotes(updatedNotes);
+      setCurrentNote(null);
+      // 새 메모 작성 후에는 메모 모드 유지
     } catch (error) {
-      console.error('AI 분류 실패:', error);
-      
-      // 실패 시 기본값으로 저장
-      const newNote: StickyNote = {
-        id: Date.now().toString(),
-        content,
-        category: '메모',
-        color: 'yellow',
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-
-      const updatedNotes = [...notes, newNote];
-      saveNotes(updatedNotes);
+      console.error('노트 추가/수정 실패:', error);
+      toast({
+        title: "저장 실패",
+        description: "다시 시도해주세요.",
+        variant: "destructive",
+      });
     } finally {
       setIsClassifying(false);
     }
@@ -150,98 +189,96 @@ export default function Home() {
 
   // 노트 삭제
   const deleteNote = async (id: string) => {
-    const updatedNotes = notes.filter(note => note.id !== id);
-    
-    // Supabase에서 삭제
-    if (isSupabaseConnected) {
-      const success = await deleteNoteFromSupabase(id);
-      if (success) {
-        console.log('✅ Supabase에서 노트 삭제 성공');
+    try {
+      if (isSupabaseConnected) {
+        await deleteNoteFromSupabase(id);
+        const updatedNotes = await fetchNotesFromSupabase();
+        setNotes(updatedNotes);
       } else {
-        console.warn('⚠️ Supabase 삭제 실패, LocalStorage 백업');
+        const updatedNotes = notes.filter(note => note.id !== id);
         localStorage.setItem('sticky-notes', JSON.stringify(updatedNotes));
+        setNotes(updatedNotes);
       }
+    } catch (error) {
+      console.error('노트 삭제 실패:', error);
+      toast({
+        title: "삭제 실패",
+        description: "다시 시도해주세요.",
+        variant: "destructive",
+      });
     }
-    
-    await saveNotes(updatedNotes);
   };
 
-  // 노트 완료 처리 (dim)
+  // 노트 완료 처리
   const toggleNoteCompletion = async (id: string) => {
-    const noteToUpdate = notes.find(note => note.id === id);
-    if (!noteToUpdate) return;
-    
-    const updatedNote = { 
-      ...noteToUpdate, 
-      isCompleted: !noteToUpdate.isCompleted,
-      updatedAt: new Date()
-    };
-    
-    const updatedNotes = notes.map(note =>
-      note.id === id ? updatedNote : note
-    );
-    
-    // Supabase에서 업데이트
-    if (isSupabaseConnected) {
-      const success = await updateNoteInSupabase(updatedNote);
-      if (success) {
-        console.log('✅ Supabase에서 노트 업데이트 성공');
+    try {
+      const noteToUpdate = notes.find(note => note.id === id);
+      if (!noteToUpdate) return;
+
+      const updatedNote = {
+        ...noteToUpdate,
+        isCompleted: !noteToUpdate.isCompleted,
+        updatedAt: new Date()
+      };
+
+      if (isSupabaseConnected) {
+        await updateNoteInSupabase(updatedNote);
+        const updatedNotes = await fetchNotesFromSupabase();
+        setNotes(updatedNotes);
       } else {
-        console.warn('⚠️ Supabase 업데이트 실패, LocalStorage 백업');
+        const updatedNotes = notes.map(note =>
+          note.id === id ? updatedNote : note
+        );
         localStorage.setItem('sticky-notes', JSON.stringify(updatedNotes));
+        setNotes(updatedNotes);
       }
+    } catch (error) {
+      console.error('노트 완료 처리 실패:', error);
+      toast({
+        title: "상태 변경 실패",
+        description: "다시 시도해주세요.",
+        variant: "destructive",
+      });
     }
-    
-    await saveNotes(updatedNotes);
   };
 
-  // 로딩 화면
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
-          <p className="text-gray-600">
-            {isSupabaseConnected ? '☁️ 클라우드 동기화 중...' : '📱 앱 로딩 중...'}
-          </p>
-        </div>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* 연결 상태 표시 */}
-      <div className="fixed top-4 right-4 z-50">
-        <div className={`px-3 py-1 rounded-full text-xs font-medium ${
-          isSupabaseConnected 
-            ? 'bg-green-100 text-green-800' 
-            : 'bg-yellow-100 text-yellow-800'
-        }`}>
-          {isSupabaseConnected ? '☁️ 클라우드 동기화' : '📱 로컬 저장'}
-        </div>
-      </div>
-      
+    <main className="min-h-screen">
       {viewMode === 'memo' ? (
         <StickyNoteInput
-          onSave={addNote}
-          onDelete={deleteNote}
-          onComplete={toggleNoteCompletion}
-          onSwitchToAffinity={() => setViewMode('diagram')}
           currentNote={currentNote}
           setCurrentNote={setCurrentNote}
+          onSave={addNote}
+          onDelete={deleteNote}
+          onSwitchToAffinity={() => setViewMode('diagram')}
+          onComplete={toggleNoteCompletion}
           isClassifying={isClassifying}
         />
       ) : (
         <AffinityDiagram
           notes={notes}
-          onNoteSelect={(note) => {
-            setCurrentNote(note);
-            setViewMode('memo');
-          }}
+          onNoteSelect={setCurrentNote}
           onSwitchToMemo={() => setViewMode('memo')}
+          onNoteComplete={toggleNoteCompletion}
+          onNoteDelete={deleteNote}
         />
       )}
-    </div>
+      
+      {/* 동기화 상태 표시 */}
+      <div className="fixed top-4 right-4 px-3 py-1.5 rounded-full text-sm font-medium bg-white shadow-sm border flex items-center gap-2">
+        <span className={`w-2 h-2 rounded-full ${isSupabaseConnected ? 'bg-green-500' : 'bg-yellow-500'}`}></span>
+        <span className="text-gray-600">
+          {isSupabaseConnected ? '클라우드 동기화' : '로컬 저장'}
+        </span>
+      </div>
+    </main>
   );
 }

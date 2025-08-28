@@ -11,8 +11,15 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 // Supabase 클라이언트 생성
 export const supabase = createClient<Database>(
-  supabaseUrl || 'http://localhost', // Fallback for local dev without env vars
-  supabaseAnonKey || 'dummy_key' // Fallback for local dev without env vars
+  supabaseUrl || 'http://localhost',
+  supabaseAnonKey || 'dummy_key',
+  {
+    realtime: {
+      params: {
+        eventsPerSecond: 10
+      }
+    }
+  }
 )
 
 // 데이터베이스 타입 정의 (자동 생성 예정)
