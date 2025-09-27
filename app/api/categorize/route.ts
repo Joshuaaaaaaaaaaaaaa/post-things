@@ -12,15 +12,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log('API 분류 요청:', content);
+    console.log('🔍 API 분류 요청:', content);
 
+    // 🧠 개선된 통합 분류 시스템 사용
     const category = categorizeByKeywords(content);
     
-    console.log('최종 분류 결과:', category);
+    console.log('✅ 최종 분류 결과:', category);
 
-    return NextResponse.json({ category });
+    return NextResponse.json({ 
+      category,
+      version: '2.0',
+      timestamp: new Date().toISOString()
+    });
   } catch (error) {
-    console.error('분류 API 오류:', error);
+    console.error('❌ 분류 API 오류:', error);
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

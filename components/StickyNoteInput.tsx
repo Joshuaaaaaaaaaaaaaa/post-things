@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { StickyNote } from '@/lib/types';
-import { getCategoryColor } from '@/lib/ai-categorizer';
+import { getCategoryColor, categorizeForPreview } from '@/lib/ai-categorizer';
 import { useGestures } from '@/hooks/useGestures';
 import { Check, X, Brain } from 'lucide-react';
 
@@ -115,66 +115,11 @@ export default function StickyNoteInput({
     }
   }, [content, isMounted]);
 
-  // 실시간 색상 미리보기 (개선된 키워드 분류) - 새 메모일 때만
+  // 🎨 실시간 색상 미리보기 (통합 분류 시스템 사용) - 새 메모일 때만
   useEffect(() => {
     if (content.trim() && isMounted && !currentNote) {
-      const text = content.toLowerCase();
-      let previewCategory: 'To-Do' | '아이디어' | '메모' = '메모';
-      
-      // 빠른 키워드 체크 (주요 키워드만)
-      const quickTodoKeywords = [
-        '해야', '하자', '하기', '할', '가야', '가기', '보기', '듣기', '읽기', '사기', '배우기',
-        '회의', '미팅', '예약', '공부', '강의', '시험', '은행', '병원', '학교', '회사',
-        'todo', 'task', 'do', 'go', 'buy', 'study', 'meeting', 'work'
-      ];
-      
-      const quickIdeaKeywords = [
-        '아이디어', '생각', '제안', '기획', '새로운', '창의', '혁신', '개선',
-        'idea', 'concept', 'creative', 'innovation', 'new'
-      ];
-      
-      // 패턴 체크
-      const todoPatterns = [
-        /\w+가기$/,     // ~가기
-        /\w+하기$/,     // ~하기  
-        /\w+듣기$/,     // ~듣기
-        /\w+보기$/,     // ~보기
-        /\w+사기$/,     // ~사기
-        /\w+배우기$/,   // ~배우기
-      ];
-      
-      let todoScore = 0;
-      let ideaScore = 0;
-      
-      // 키워드 점수
-      quickTodoKeywords.forEach(keyword => {
-        if (text.includes(keyword)) todoScore++;
-      });
-      
-      quickIdeaKeywords.forEach(keyword => {
-        if (text.includes(keyword)) ideaScore++;
-      });
-      
-      // 패턴 점수 (가중치)
-      todoPatterns.forEach(pattern => {
-        if (pattern.test(text)) todoScore += 2;
-      });
-      
-      // 시간/장소 표현 체크
-      if (/\d+시|오늘|내일|월요일|화요일|수요일|목요일|금요일/.test(text)) {
-        todoScore += 1;
-      }
-      
-      if (/은행|병원|학교|회사|마트|카페/.test(text)) {
-        todoScore += 1;
-      }
-      
-      // 분류 결정
-      if (todoScore > ideaScore && todoScore >= 1) {
-        previewCategory = 'To-Do';
-      } else if (ideaScore > todoScore && ideaScore >= 1) {
-        previewCategory = '아이디어';
-      }
+      // 🚀 새로운 통합 분류 시스템 사용 (일관성 보장)
+      const previewCategory = categorizeForPreview(content);
       
       const previewColor = getCategoryColor(previewCategory);
       const colorMap = {

@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { StickyNote } from '@/lib/types';
 import { getCategoryPriority } from '@/lib/ai-categorizer';
+import { classifyTopicSmart } from '@/lib/smart-topic-extractor';
 import { Edit3, Clock, Grid, Tag, MoreVertical, Check, Trash2, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
@@ -33,7 +34,7 @@ export default function AffinityDiagram({
   const [sortType, setSortType] = useState<SortType>('category');
   const [actionFeedback, setActionFeedback] = useState<{ [key: string]: 'complete' | 'delete' | null }>({});
   
-  const handleNoteClick = (note: StickyNote, e: React.MouseEvent) => {
+  const handleNoteClick = (note: StickyNote, e: React.MouseEvent<HTMLElement>) => {
     // 더보기 메뉴 클릭 시 이벤트 전파 중단
     if ((e.target as HTMLElement).closest('.more-menu')) {
       e.stopPropagation();
@@ -47,6 +48,18 @@ export default function AffinityDiagram({
     onNoteSelect(null);
     onSwitchToMemo();
   };
+
+  // 스마트 토픽 분류 테스트 (개발용)
+  useEffect(() => {
+    if (notes.length > 3 && process.env.NODE_ENV === 'development') {
+      // 개발 환경에서만 토픽 분류 성능 테스트
+      console.log('🧪 스마트 토픽 분류 테스트 실행');
+      import('@/lib/smart-topic-extractor').then(({ testSmartTopicExtractor }) => {
+        testSmartTopicExtractor();
+      });
+    }
+  }, [notes.length]);
+
 
   // 완료 처리 with 피드백
   const handleComplete = (noteId: string, e?: React.MouseEvent) => {
@@ -88,75 +101,25 @@ export default function AffinityDiagram({
     }, 300);
   };
 
-  // 주제 추출 함수 개선
+  // 스마트 토픽 추출 (컨텍스트 + 개인 패턴 기반)
   const extractTopic = (content: string): string => {
-    // 복합 키워드 먼저 체크 (순서 중요)
-    const complexKeywords = [
-      'AI Fitness',
-      'Next.js',
-      'React Native',
-      'UI/UX',
-    ];
-    
-    // 중요 패턴 (우선순위 순서대로)
-    const patterns = [
-      // 사람 + 보고/회의/미팅
-      /([가-힣]+[님께서|님과|님|상무|부장|차장|과장])\s*([가-힣]*(?:보고|회의|미팅))/,
-      // 사람 + 행동
-      /([가-힣]+[님께서|님과|님|상무|부장|차장|과장])\s*([가-힣]+)/,
-      // 회의/미팅/보고 관련
-      /([가-힣]+(?:보고|회의|미팅))/,
-      // 프로젝트/제품 이름
-      /([A-Za-z\s]+(?:\s*[0-9]*\.[0-9x]*|\s*프로젝트|서비스|앱|웹))/,
-    ];
-
-    // 불필요한 단어/조사 제거
-    const stopWords = ['에서', '에게', '으로', '하고', '하자', '할', '을', '를', '이', '가', '및', '등'];
-    
-    // 1. 복합 키워드 체크
-    for (const keyword of complexKeywords) {
-      if (content.includes(keyword)) {
-        return keyword;
-      }
-    }
-    
-    // 2. 중요 패턴 체크
-    for (const pattern of patterns) {
-      const match = content.match(pattern);
-      if (match) {
-        // 패턴에 따라 적절한 부분 반환
-        if (match[2] && (match[2].includes('보고') || match[2].includes('회의') || match[2].includes('미팅'))) {
-          return `${match[1]} ${match[2]}`;
-        }
-        return match[1];
-      }
-    }
-    
-    // 3. 문장을 단어로 분리하고 전처리
-    const words = content
-      .split(/[\s,]+/)
-      .filter(word => !stopWords.includes(word))
-      .filter(word => word.length >= 2);
-    
-    // 4. 연속된 의미있는 단어 찾기
-    for (let i = 0; i < words.length - 1; i++) {
-      const current = words[i];
-      const next = words[i + 1];
-      
-      // 영문+숫자 조합이나 의미있는 단어 조합
-      if ((/[A-Za-z]/.test(current) && /[A-Za-z0-9]/.test(next)) ||
-          (current.length >= 2 && next.length >= 2)) {
-        return `${current} ${next}`;
-      }
-    }
-    
-    return words[0] || '기타';
+    // 새로운 스마트 토픽 분류기 사용
+    const result = classifyTopicSmart(content, notes);
+    return result.topic;
   };
 
-  // 주제별 그룹화 함수
+  // 주제별 그룹화 함수 (스마트 토픽 분류 적용)
   const groupByTopic = (notes: StickyNote[]) => {
     return notes.reduce((acc, note) => {
       const topic = extractTopic(note.content);
+      
+      // 개발 환경에서 토픽 분류 과정 디버깅
+      if (process.env.NODE_ENV === 'development' && Math.random() < 0.1) { // 10% 확률로 디버깅
+        import('@/lib/smart-topic-extractor').then(({ debugTopicClassification }) => {
+          debugTopicClassification(note.content, notes);
+        });
+      }
+      
       if (!acc[topic]) {
         acc[topic] = [];
       }
@@ -164,6 +127,7 @@ export default function AffinityDiagram({
       return acc;
     }, {} as Record<string, StickyNote[]>);
   };
+
 
   // 카테고리별 그룹화 함수
   const groupByCategory = (notes: StickyNote[]) => {
@@ -217,32 +181,32 @@ export default function AffinityDiagram({
         const { groupedByDate } = sortByTime(notes);
         const sortedDates = Object.keys(groupedByDate).sort().reverse();
         return { groups: sortedDates, groupedNotes: groupedByDate, isTimeline: true };
+      
+      default:
+        return { groups: [], groupedNotes: {}, isTimeline: false };
     }
   };
 
-  // 카테고리별 색상 테마
+  // 🎨 M2Z1 스타일 카테고리별 색상 테마 (라이트 모드)
   const getTheme = (group: string) => {
     switch (group) {
       case 'To-Do':
         return {
-          bg: 'bg-pink-50',
-          border: 'border-pink-200',
-          title: 'text-pink-800',
-          badge: 'bg-pink-100 text-pink-800'
+          accent: 'text-pink-600',
+          badgeColor: 'bg-pink-50 text-pink-700 border-pink-200',
+          completedColor: 'bg-green-50 text-green-700 border-green-200'
         };
       case '아이디어':
         return {
-          bg: 'bg-blue-50',
-          border: 'border-blue-200',
-          title: 'text-blue-800',
-          badge: 'bg-blue-100 text-blue-800'
+          accent: 'text-blue-600',
+          badgeColor: 'bg-blue-50 text-blue-700 border-blue-200',
+          completedColor: 'bg-green-50 text-green-700 border-green-200'
         };
       default:
         return {
-          bg: 'bg-yellow-50',
-          border: 'border-yellow-200',
-          title: 'text-yellow-800',
-          badge: 'bg-yellow-100 text-yellow-800'
+          accent: 'text-amber-600',
+          badgeColor: 'bg-amber-50 text-amber-700 border-amber-200',
+          completedColor: 'bg-green-50 text-green-700 border-green-200'
         };
     }
   };
@@ -250,169 +214,213 @@ export default function AffinityDiagram({
   const { groups, groupedNotes, isTimeline } = getSortedNotesAndGroups();
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 relative">
-      {/* 정렬 옵션 선택 */}
-      <div className="max-w-4xl mx-auto mb-6">
-        <div className="bg-white rounded-lg shadow-sm p-2 flex gap-2">
-          <button
-            onClick={() => setSortType('category')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-md transition-all ${
-              sortType === 'category'
-                ? 'bg-blue-100 text-blue-700'
-                : 'hover:bg-gray-100'
-            }`}
-          >
-            <Tag size={18} />
-            <span className="text-base">카테고리별</span>
-          </button>
-          <button
-            onClick={() => setSortType('topic')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-md transition-all ${
-              sortType === 'topic'
-                ? 'bg-blue-100 text-blue-700'
-                : 'hover:bg-gray-100'
-            }`}
-          >
-            <Grid size={18} />
-            <span className="text-base">주제별</span>
-          </button>
-          <button
-            onClick={() => setSortType('time')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-md transition-all ${
-              sortType === 'time'
-                ? 'bg-blue-100 text-blue-700'
-                : 'hover:bg-gray-100'
-            }`}
-          >
-            <Clock size={18} />
-            <span className="text-base">시간순</span>
-          </button>
+    <div className="min-h-screen bg-white text-gray-900 relative">
+      {/* 🎨 M2Z1 스타일 헤더 영역 (화이트 배경 최적화) */}
+      <header className="w-full border-b border-gray-200 bg-white">
+        <div className="max-w-7xl mx-auto px-6 py-8">
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <h1 className="text-4xl font-bold mb-2 text-gray-900">AI 메모 갤러리</h1>
+              <p className="text-gray-600 text-lg">스마트 분류로 정리된 당신의 생각들</p>
+            </div>
+            <div className="text-right">
+              <p className="text-2xl font-bold text-blue-600">{notes.length}</p>
+              <p className="text-gray-500 text-sm">Total Memos</p>
+            </div>
+          </div>
+          
+          {/* M2Z1 스타일 네비게이션 바 (라이트 모드) */}
+          <nav className="flex gap-1 bg-gray-100 rounded-lg p-1">
+            <button
+              onClick={() => setSortType('category')}
+              className={`flex items-center gap-2 px-6 py-3 rounded-md transition-all text-sm font-medium ${
+                sortType === 'category'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+              }`}
+            >
+              <Tag size={16} />
+              Categories
+            </button>
+            <button
+              onClick={() => setSortType('topic')}
+              className={`flex items-center gap-2 px-6 py-3 rounded-md transition-all text-sm font-medium ${
+                sortType === 'topic'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+              }`}
+            >
+              <Grid size={16} />
+              Topics
+            </button>
+            <button
+              onClick={() => setSortType('time')}
+              className={`flex items-center gap-2 px-6 py-3 rounded-md transition-all text-sm font-medium ${
+                sortType === 'time'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+              }`}
+            >
+              <Clock size={16} />
+              Timeline
+            </button>
+          </nav>
         </div>
-      </div>
+      </header>
 
       {notes.length === 0 ? (
-        <div className="text-center text-gray-500 mt-12">
-          <p className="text-lg mb-4">아직 작성된 포스트잇이 없습니다.</p>
-          <p className="text-base text-gray-400">우측 하단 버튼을 눌러 첫 메모를 작성해보세요!</p>
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="text-center">
+            <div className="w-24 h-24 mx-auto mb-6 rounded-full bg-gray-100 flex items-center justify-center">
+              <Edit3 className="w-12 h-12 text-gray-400" />
+            </div>
+            <h3 className="text-2xl font-bold mb-4 text-gray-800">아직 메모가 없습니다</h3>
+            <p className="text-gray-600 text-lg mb-8">첫 번째 메모를 작성해서 AI 갤러리를 시작해보세요</p>
+            <button
+              onClick={handleNewMemo}
+              className="px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-all shadow-sm hover:shadow-md"
+            >
+              새 메모 작성하기
+            </button>
+          </div>
         </div>
       ) : (
-        <div className="max-w-4xl mx-auto space-y-8 pb-20">
+        <main className="max-w-7xl mx-auto px-6 py-8">
           {groups.map((group) => {
             const groupNotes = groupedNotes[group];
-            const theme = getTheme(group);
             // 완료되지 않은 노트만 카운트
             const activeCount = groupNotes.filter(note => !note.isCompleted).length;
             const completedCount = groupNotes.filter(note => note.isCompleted).length;
             
             return (
-              <div key={group} className={`${isTimeline ? '' : `${theme.bg} ${theme.border} border-2`} rounded-xl p-6`}>
-                {/* 그룹 헤더 */}
-                <div className="flex items-center justify-between mb-6">
-                  <div className="flex items-center gap-3">
+              <section key={group} className="mb-16">
+                {/* 🎨 M2Z1 스타일 섹션 헤더 */}
+                <div className="flex items-center justify-between mb-8">
+                  <div className="flex items-center gap-4">
                     {isTimeline ? (
-                      <h2 className="text-2xl font-bold text-gray-800">
+                      <h2 className="text-3xl font-bold text-gray-900">
                         {format(new Date(group), 'M월 d일 (E)', { locale: ko })}
                       </h2>
                     ) : (
                       <>
-                        <h2 className={`text-2xl font-bold ${theme.title}`}>{group}</h2>
-                        <span className={`px-4 py-1.5 rounded-full text-base font-medium ${theme.badge}`}>
-                          {activeCount}개
-                        </span>
-                        {group === 'To-Do' && completedCount > 0 && (
-                          <span className="px-3 py-1.5 rounded-full text-sm bg-green-100 text-green-800">
-                            {completedCount}개 완료
+                        <h2 className={`text-3xl font-bold ${getTheme(group).accent}`}>{group}</h2>
+                        <div className="flex items-center gap-3">
+                          <span className={`px-4 py-2 rounded-full text-sm font-medium border ${getTheme(group).badgeColor}`}>
+                            {activeCount} items
                           </span>
-                        )}
+                          {group === 'To-Do' && completedCount > 0 && (
+                            <span className={`px-3 py-2 rounded-full text-sm font-medium border ${getTheme(group).completedColor}`}>
+                              {completedCount} completed
+                            </span>
+                          )}
+                        </div>
                       </>
                     )}
                   </div>
                 </div>
                 
-                {/* 노트 그리드/타임라인 */}
-                <div className={`grid ${isTimeline ? 'grid-cols-2' : 'grid-cols-3'} gap-4`}>
+                {/* 🖼️ M2Z1 스타일 갤러리 그리드 */}
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
                   {groupNotes.map((note) => (
                     <div
                       key={note.id}
                       onClick={(e) => handleNoteClick(note, e)}
-                      className={`relative p-4 rounded-lg shadow-md cursor-pointer transition-all duration-200 ${
-                        note.color === 'yellow' ? 'bg-yellow-200 hover:bg-yellow-300' :
-                        note.color === 'pink' ? 'bg-pink-200 hover:bg-pink-300' :
-                        note.color === 'blue' ? 'bg-blue-200 hover:bg-blue-300' : 
-                        'bg-green-200 hover:bg-green-300'
-                      } ${
-                        isTimeline ? 'transform-none hover:translate-x-2' : 'aspect-square transform hover:scale-105'
-                      }`}
-                      style={{ height: isTimeline ? 'auto' : undefined }}
+                      className="group relative aspect-square cursor-pointer transition-all duration-300 hover:scale-105"
                     >
-                      {/* 더보기 메뉴 */}
-                      <div className="absolute top-2 right-2 more-menu z-20">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger className="hover:bg-black/10 p-1 rounded-full">
-                            <MoreVertical className="w-4 h-4 text-gray-600" />
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent>
-                            {!note.isCompleted && (
-                              <DropdownMenuItem onClick={(e) => handleComplete(note.id, e)}>
-                                <Check className="w-4 h-4 mr-2" />
-                                <span>완료</span>
-                              </DropdownMenuItem>
-                            )}
-                            <DropdownMenuItem onClick={(e) => handleDelete(note.id, e)}>
-                              <Trash2 className="w-4 h-4 mr-2" />
-                              <span>삭제</span>
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-
-                      {/* 포스트잇 상단 접착 부분 */}
-                      <div className="relative h-full">
-                        <div className="absolute top-0 left-1/2 transform -translate-x-1/2 w-8 h-1.5 bg-yellow-300 rounded-b-sm opacity-60 -mt-2"></div>
+                      {/* M2Z1 스타일 메모 카드 */}
+                      <div className={`relative w-full h-full rounded-2xl shadow-lg transition-all duration-300 ${
+                        note.color === 'yellow' ? 'bg-gradient-to-br from-yellow-200 to-yellow-300' :
+                        note.color === 'pink' ? 'bg-gradient-to-br from-pink-200 to-pink-300' :
+                        note.color === 'blue' ? 'bg-gradient-to-br from-blue-200 to-blue-300' : 
+                        'bg-gradient-to-br from-green-200 to-green-300'
+                      } group-hover:shadow-2xl`}>
                         
-                        <div className="h-full flex flex-col justify-between pt-2">
-                          {/* 메모 내용 */}
-                          <div className="flex-1">
-                            <p className="text-base leading-relaxed">
+                        {/* 더보기 아이콘 (항상 표시) */}
+                        <div className="absolute top-2 right-2 z-50 more-menu">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <button 
+                                className="p-2 text-gray-600 hover:text-gray-800 transition-colors hover:bg-white/80 rounded-full shadow-sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  e.preventDefault();
+                                }}
+                              >
+                                <MoreVertical className="w-4 h-4" />
+                              </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-32">
+                              {!note.isCompleted && (
+                                <DropdownMenuItem onClick={(e) => handleComplete(note.id, e)}>
+                                  <Check className="w-4 h-4 mr-2" />
+                                  <span>완료</span>
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuItem onClick={(e) => handleDelete(note.id, e)}>
+                                <Trash2 className="w-4 h-4 mr-2" />
+                                <span>삭제</span>
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+
+                        {/* 포스트잇 접착 테이프 효과 */}
+                        <div className="absolute top-0 left-1/2 transform -translate-x-1/2 w-12 h-3 bg-yellow-400/40 rounded-b-lg"></div>
+                        
+                          {/* 메모 내용 영역 */}
+                          <div className="relative h-full flex flex-col justify-between p-6 pt-8">
+                          {/* 메모 텍스트 */}
+                          <div className="flex-1 flex items-center justify-center">
+                            <p className="text-gray-800 text-center leading-relaxed font-medium text-sm">
                               {note.content}
                             </p>
                           </div>
                           
-                          {/* 하단 정보 */}
-                          <div className="flex items-center justify-between mt-3">
-                            <span className="text-sm text-gray-600 font-medium">
-                              {format(note.createdAt instanceof Date ? note.createdAt : new Date(note.createdAt), 'M월 d일 (E) HH:mm', { locale: ko })}
+                          {/* 하단 메타데이터 */}
+                          <div className="flex items-center justify-between pt-4 border-t border-black/10">
+                            <span className="text-xs text-gray-600 font-medium">
+                              {group}
+                            </span>
+                            <span className="text-xs text-gray-500">
+                              {format(note.createdAt instanceof Date ? note.createdAt : new Date(note.createdAt), 'MM.dd', { locale: ko })}
                             </span>
                           </div>
                         </div>
-                      </div>
 
-                      {/* 완료 오버레이 */}
-                      {note.isCompleted && (
-                        <div className="absolute inset-0 bg-black bg-opacity-50 rounded-lg flex items-center justify-center z-10">
-                          <span className="text-white text-lg font-bold">완료</span>
-                        </div>
-                      )}
-
-                      {/* 액션 피드백 */}
-                      {actionFeedback[note.id] && (
-                        <div className="absolute inset-0 bg-black bg-opacity-20 rounded-lg flex items-center justify-center z-30">
-                          <div className="bg-white rounded-full p-3 shadow-lg">
-                            {actionFeedback[note.id] === 'complete' ? (
-                              <Check className="w-8 h-8 text-green-500" />
-                            ) : (
-                              <X className="w-8 h-8 text-red-500" />
-                            )}
+                        {/* 완료 오버레이 (M2Z1 스타일) */}
+                        {note.isCompleted && (
+                          <div className="absolute inset-0 bg-black/60 rounded-2xl flex items-center justify-center z-10 backdrop-blur-sm">
+                            <div className="text-center">
+                              <Check className="w-8 h-8 text-green-400 mx-auto mb-2" />
+                              <span className="text-white font-bold text-sm">완료됨</span>
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        )}
+
+                        {/* 액션 피드백 오버레이 */}
+                        {actionFeedback[note.id] && (
+                          <div className="absolute inset-0 bg-black/40 rounded-2xl flex items-center justify-center z-30 backdrop-blur-sm">
+                            <div className="bg-white/90 rounded-full p-4 shadow-lg">
+                              {actionFeedback[note.id] === 'complete' ? (
+                                <Check className="w-6 h-6 text-green-600" />
+                              ) : (
+                                <X className="w-6 h-6 text-red-600" />
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
                 
+                {/* 빈 그룹 메시지 (라이트 모드) */}
                 {groupNotes.length === 0 && (
-                  <div className="text-center py-8 text-gray-500">
-                    <p className="text-base">
+                  <div className="text-center py-16">
+                    <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gray-100 flex items-center justify-center">
+                      <Grid className="w-8 h-8 text-gray-400" />
+                    </div>
+                    <p className="text-gray-600 text-lg">
                       이 {
                         sortType === 'category' ? '카테고리' : 
                         sortType === 'topic' ? '주제' : '날짜'
@@ -420,20 +428,30 @@ export default function AffinityDiagram({
                     </p>
                   </div>
                 )}
-              </div>
+              </section>
             );
           })}
-        </div>
+        </main>
       )}
 
-      {/* 플로팅 새 메모 작성 버튼 */}
-      <button
-        onClick={handleNewMemo}
-        className="fixed bottom-6 right-6 w-12 h-12 bg-blue-500 hover:bg-blue-600 text-white rounded-full shadow-lg hover:shadow-xl transform hover:scale-110 transition-all duration-200 flex items-center justify-center z-10"
-        aria-label="새 메모 작성"
-      >
-        <Edit3 className="w-5 h-5" />
-      </button>
+      {/* 🎨 M2Z1 스타일 플로팅 액션 버튼 (라이트 모드) */}
+      <div className="fixed bottom-6 right-6 z-20">
+        <button
+          onClick={handleNewMemo}
+          className="group relative w-14 h-14 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl shadow-xl hover:shadow-2xl transform hover:scale-110 transition-all duration-300 flex items-center justify-center"
+          aria-label="새 메모 작성"
+        >
+          <Edit3 className="w-6 h-6 transition-transform group-hover:scale-110" />
+          
+          {/* M2Z1 스타일 툴팁 (라이트 모드) */}
+          <div className="absolute bottom-full right-0 mb-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
+            <div className="bg-gray-800 text-white text-sm px-3 py-2 rounded-lg whitespace-nowrap shadow-lg">
+              새 메모 작성
+              <div className="absolute top-full right-3 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></div>
+            </div>
+          </div>
+        </button>
+      </div>
     </div>
   );
 }
